@@ -244,8 +244,8 @@ WrapStyle: 2
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: KTVMain,{font_family},56,&H0045D4FF,&H00FFFFFF,&H0014100C,&H88000000,-1,0,0,0,100,100,2.2,0,1,4.0,2.2,2,80,80,68,1
-Style: StageCue,{font_family},26,&H00A8E2FF,&H00A8E2FF,&H0014100C,&H70000000,-1,0,0,0,100,100,1.5,0,1,2.5,1.2,2,80,80,138,1
+Style: KTVMain,{font_family},56,&H0045D4FF,&H00FFFFFF,&H0014100C,&H88000000,-1,0,0,0,100,100,2.2,0,1,4.0,2.2,2,80,80,66,1
+Style: StageCue,{font_family},26,&H00A8E2FF,&H00A8E2FF,&H0014100C,&H70000000,-1,0,0,0,100,100,1.5,0,1,2.5,1.2,2,80,80,152,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
