@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+build/
+mv_build_cache/
+output/
+gradio_outputs/
+mv_outputs/
+*.mp4
+*.wav
+*.mp3
