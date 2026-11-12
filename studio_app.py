@@ -409,6 +409,49 @@ def ensure_engine_ready(lm_choice: str = "0.6B") -> str:
 # 100% Copyright-Free (YouTube Monetization Ready) Song Presets
 # ---------------------------------------------------------------------------
 PRESETS = {
+    "kuangge_raprock": {
+        "title": "狂歌炸長安",
+        "lang": "🇹🇼 華語 / 繁體中文 (zh)",
+        "instrumental": False,
+        "duration": 60,
+        "bpm": 154,
+        "style": (
+            "Explosive Chinese Classical Guofeng Nu-Metal Rap-Rock, Heavy Stadium Rock Concert Anthem, "
+            "Crushing Drop-D Distorted Electric Guitar Riffs, Thunderous Chinese Tang War Drums and Fast Double-Kick Rock Drums, "
+            "Piercing High-Energy Chinese Suona Horn Lead and Electric Pipa Riff, "
+            "Aggressive Rapid-Fire Male Mandarin Rap Flow in Verses, Explosive High-Octane Gritty Rock Shout and Rap-Chant Chorus, "
+            "Crowd Hype Gang Vocals Hey Ha, Linkin Park meets Chinese Classical Folk Metal Hip-Hop, "
+            "154 BPM, High Adrenaline Live TV Music Show Arena Energy, Massive Punchy Sub-Bass Broadcast Mix"
+        ),
+        "lyrics": """[Intro]
+嘿！哈！嗩吶戰鼓給我炸起來！
+
+[Verse 1 - Rap]
+金鑾殿的規矩老子通通撕碎
+脫掉官靴甩開折子今夜不睡
+戰鼓擂動長安街頭烈火在燒
+左手酒壺右手麥克風把屋頂掀翻掉
+看那權貴低頭哈腰活得太累
+不如跟我狂飆搖滾痛飲千杯
+
+[Pre-Chorus - Rap Chant]
+雙手舉高！跟著戰鼓跳！
+一二三四！把全場都炸掉！
+
+[Chorus - Explosive Rock & Rap]
+人生得意須盡歡！莫使金樽空對月！
+天生我材必有用！千金散盡還復來！
+嗩吶一響震破九重天外天！
+狂歌說唱老子就是大唐詩仙！
+
+[Bridge - Fast Rap & Suona Solo]
+十步寫一詩 千里不留行
+電吉他配嗩吶 炸醒這座城
+
+[Outro - Arena Finale Shout]
+仰天大笑出門去！全場一起吼！
+我輩豈是蓬蒿人！乾了這碗酒！""",
+    },
     "libai_rock": {
         "title": "詩仙醉長安",
         "lang": "🇹🇼 華語 / 繁體中文 (zh)",
@@ -729,7 +772,7 @@ CUSTOM_CSS = """
 }
 """
 
-default_p = PRESETS["libai_rock"]
+default_p = PRESETS["kuangge_raprock"]
 
 with gr.Blocks(css=CUSTOM_CSS, theme=gr.themes.Soft(), title="私有版免費中文 Suno 音樂 & 1080p MV 工作室") as demo:
     gr.HTML(
@@ -751,7 +794,8 @@ with gr.Blocks(css=CUSTOM_CSS, theme=gr.themes.Soft(), title="私有版免費中
         with gr.Tab("🎵 1. 免費 AI 寫歌工作台（類 Suno 介面）"):
             gr.Markdown("### ✨ 一鍵套用「100% 原創零版權（可直接開 YouTube 盈利）」歌曲範本：")
             with gr.Row():
-                btn_p1 = gr.Button("🎸 大唐搖滾《詩仙醉長安》（推薦！）", variant="primary", size="sm")
+                btn_p0 = gr.Button("🔥 國風炸裂說唱《狂歌炸長安》（嗩吶搖滾推薦！）", variant="primary", size="sm")
+                btn_p1 = gr.Button("🎸 大唐搖滾《詩仙醉長安》", variant="secondary", size="sm")
                 btn_p2 = gr.Button("⚔️ 國風燃曲《俠客行天下》", variant="secondary", size="sm")
                 btn_p3 = gr.Button("🌃 華語抒情《末班車的星光》", variant="secondary", size="sm")
                 btn_p4 = gr.Button("⚡ 電音搖滾《霓虹破曉》", variant="secondary", size="sm")
@@ -846,6 +890,7 @@ with gr.Blocks(css=CUSTOM_CSS, theme=gr.themes.Soft(), title="私有版免費中
                     mv_video_out = gr.Video(label="📺 1080p 成品 MV 預覽")
                     mv_file_out = gr.File(label="⬇️ 免費下載 1080p MP4 影片檔")
 
+    btn_p0.click(lambda: load_preset("kuangge_raprock"), outputs=[song_title_in, style_in, lyrics_in, lang_in, inst_in, dur_in, bpm_in])
     btn_p1.click(lambda: load_preset("libai_rock"), outputs=[song_title_in, style_in, lyrics_in, lang_in, inst_in, dur_in, bpm_in])
     btn_p2.click(lambda: load_preset("xiake_rock"), outputs=[song_title_in, style_in, lyrics_in, lang_in, inst_in, dur_in, bpm_in])
     btn_p3.click(lambda: load_preset("city_ballad"), outputs=[song_title_in, style_in, lyrics_in, lang_in, inst_in, dur_in, bpm_in])
