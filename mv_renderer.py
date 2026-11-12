@@ -212,7 +212,7 @@ def build_tv_hud_overlays(
     c_draw.rounded_rectangle((cx0, cy0, cx1, cy1), radius=18, fill=(12, 15, 24, 232), outline=(245, 198, 84, 225), width=2)
     c_draw.rounded_rectangle((cx0 + 22, cy0 + 24, cx0 + 30, cy1 - 24), radius=4, fill=(255, 204, 72, 255))
 
-    c_draw.rounded_rectangle((cx0 + 48, cy0 + 22, cx0 + 246, cy0 + 54), radius=6, fill=(255, 204, 72, 38), outline=(255, 204, 72, 160), width=1)
+    c_draw.rounded_rectangle((cx0 + 48, cy0 + 22, cx0 + 246, cy0 + 54), radius=6, fill=(54, 46, 26, 242), outline=(255, 204, 72, 175), width=1)
     c_draw.text((cx0 + 60, cy0 + 25), "原創競演單曲 #01", font=f_tag, fill=(255, 214, 102, 255))
     c_draw.text((cx0 + 44, cy0 + 66), song_title, font=f_song, fill=(255, 250, 235, 255))
     c_draw.text((meta_x, cy0 + 82), clean_credits, font=f_meta, fill=(210, 218, 232, 245))
