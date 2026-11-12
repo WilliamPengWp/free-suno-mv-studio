@@ -409,6 +409,45 @@ def ensure_engine_ready(lm_choice: str = "0.6B") -> str:
 # 100% Copyright-Free (YouTube Monetization Ready) Song Presets
 # ---------------------------------------------------------------------------
 PRESETS = {
+    "jiayibingding_rock": {
+        "title": "醉月長安（煙嗓音綜版）",
+        "lang": "🇹🇼 華語 / 繁體中文 (zh)",
+        "instrumental": False,
+        "duration": 60,
+        "bpm": 96,
+        "style": (
+            "Chinese Live TV Singing Show Symphonic Guofeng Power-Rock Anthem, Mandopop Emotional Arena Rock Live Band, "
+            "Deep Raspy Smoky Male Vocal, Weathered Gravelly Husky Baritone-Tenor Voice with Heavy Emotional Rasp and Raw Throat Grit, "
+            "Grand Concert Piano Chords and Mournful Chinese Erhu and Guzheng Intro, "
+            "Intimate Husky Rhythmic Mandarin Melodic Rap Storytelling in Verse with Warm Electric Bass and Crisp Live Snare Groove, "
+            "Dramatic Floor-Tom Drum Build-Up and Swelling Symphonic String Orchestra in Pre-Chorus, "
+            "Explosive Soaring Raspy High-Note Rock Belt and Rhythmic Rap-Rock Chorus with Massive Distorted Electric Guitar Power Chords, "
+            "Crashing Live Acoustic Rock Drums, Heroic Chinese Suona and Erhu Counter-Melody, Live Concert Hall Stage Ambience, 96 BPM, C# Minor"
+        ),
+        "lyrics": """[Intro - Piano & Weeping Erhu]
+這一壺烈酒 敬長安的風
+
+[Verse 1 - Deep Raspy Smoky Melodic Rap]
+金鑾殿的燭火照不亮我半生孤單
+脫下官袍把功名利祿摔成兩半
+世人笑我太瘋癲 把我當作路人看
+只有手裡這壺濁酒懂我心裡的不甘
+提筆寫盡人間事 墨跡還沒乾
+今夜就讓搖滾陪我把長安城掀翻
+
+[Pre-Chorus - Rising Gritty Belt & Drum Build]
+誰甘心一輩子只做別人的配角！
+戰鼓給我敲響！全場把手舉高！
+
+[Chorus - Explosive Raspy High-Note Rock Belt & Rap]
+人生得意須盡歡！莫使金樽空對月！
+就算千金散盡老子也絕不妥協！
+天生我材必有用！管他風雪有多烈！
+用這沙啞的狂歌把黑夜全撕裂！
+
+[Outro - Emotional Raspy High Note & Piano Erhu Finale]
+仰天大笑出門去！我命由我不由天！""",
+    },
     "kuangge_raprock": {
         "title": "狂歌炸長安",
         "lang": "🇹🇼 華語 / 繁體中文 (zh)",
@@ -772,7 +811,7 @@ CUSTOM_CSS = """
 }
 """
 
-default_p = PRESETS["kuangge_raprock"]
+default_p = PRESETS["jiayibingding_rock"]
 
 with gr.Blocks(css=CUSTOM_CSS, theme=gr.themes.Soft(), title="私有版免費中文 Suno 音樂 & 1080p MV 工作室") as demo:
     gr.HTML(
@@ -794,7 +833,8 @@ with gr.Blocks(css=CUSTOM_CSS, theme=gr.themes.Soft(), title="私有版免費中
         with gr.Tab("🎵 1. 免費 AI 寫歌工作台（類 Suno 介面）"):
             gr.Markdown("### ✨ 一鍵套用「100% 原創零版權（可直接開 YouTube 盈利）」歌曲範本：")
             with gr.Row():
-                btn_p0 = gr.Button("🔥 國風炸裂說唱《狂歌炸長安》（嗩吶搖滾推薦！）", variant="primary", size="sm")
+                btn_jybd = gr.Button("🎤 豬八戒甲乙丙丁風・煙嗓搖滾說唱《醉月長安》（推薦！）", variant="primary", size="sm")
+                btn_p0 = gr.Button("🔥 國風嗩吶重型說唱《狂歌炸長安》", variant="secondary", size="sm")
                 btn_p1 = gr.Button("🎸 大唐搖滾《詩仙醉長安》", variant="secondary", size="sm")
                 btn_p2 = gr.Button("⚔️ 國風燃曲《俠客行天下》", variant="secondary", size="sm")
                 btn_p3 = gr.Button("🌃 華語抒情《末班車的星光》", variant="secondary", size="sm")
@@ -890,6 +930,7 @@ with gr.Blocks(css=CUSTOM_CSS, theme=gr.themes.Soft(), title="私有版免費中
                     mv_video_out = gr.Video(label="📺 1080p 成品 MV 預覽")
                     mv_file_out = gr.File(label="⬇️ 免費下載 1080p MP4 影片檔")
 
+    btn_jybd.click(lambda: load_preset("jiayibingding_rock"), outputs=[song_title_in, style_in, lyrics_in, lang_in, inst_in, dur_in, bpm_in])
     btn_p0.click(lambda: load_preset("kuangge_raprock"), outputs=[song_title_in, style_in, lyrics_in, lang_in, inst_in, dur_in, bpm_in])
     btn_p1.click(lambda: load_preset("libai_rock"), outputs=[song_title_in, style_in, lyrics_in, lang_in, inst_in, dur_in, bpm_in])
     btn_p2.click(lambda: load_preset("xiake_rock"), outputs=[song_title_in, style_in, lyrics_in, lang_in, inst_in, dur_in, bpm_in])
