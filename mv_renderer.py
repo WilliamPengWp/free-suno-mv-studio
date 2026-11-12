@@ -156,10 +156,14 @@ def build_tv_hud_overlays(
 
     f_logo = load_cjk_font(FONT_CANDIDATES_SERIF, 30)
     f_sub = load_cjk_font(FONT_CANDIDATES_BOLD, 18)
-    draw.rounded_rectangle((48, 38, 456, 106), radius=14, fill=(14, 16, 24, 196), outline=(245, 198, 84, 220), width=2)
+    clean_title = strip_non_bmp_emojis(show_title)
+    clean_sub = strip_non_bmp_emojis(show_subtitle)
+    sub_bbox = draw.textbbox((252, 54), clean_sub, font=f_sub)
+    tl_x1 = max(456, sub_bbox[2] + 24)
+    draw.rounded_rectangle((48, 38, tl_x1, 106), radius=14, fill=(14, 16, 24, 196), outline=(245, 198, 84, 220), width=2)
     draw.rounded_rectangle((62, 52, 70, 92), radius=3, fill=(255, 206, 78, 255))
-    draw.text((84, 46), strip_non_bmp_emojis(show_title), font=f_logo, fill=(255, 226, 138, 255))
-    draw.text((252, 54), strip_non_bmp_emojis(show_subtitle), font=f_sub, fill=(232, 236, 245, 235))
+    draw.text((84, 46), clean_title, font=f_logo, fill=(255, 226, 138, 255))
+    draw.text((252, 54), clean_sub, font=f_sub, fill=(232, 236, 245, 235))
 
     draw.rounded_rectangle((48, 114, 266, 144), radius=8, fill=(20, 22, 30, 175))
     draw.ellipse((60, 123, 72, 135), fill=(255, 68, 68, 255))
@@ -176,9 +180,27 @@ def build_tv_hud_overlays(
     persistent_png = out_dir / "hud_persistent.png"
     base.save(persistent_png)
 
-    # Opening Singer & Credits Card
+    # Opening Singer & Credits Card (auto-sized to fit all lines cleanly)
     card_img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    cx0, cy0, cx1, cy1 = 64, 595, 840, 835
+    title_font_size = 46 if len(song_title) <= 8 else 36
+    f_song = load_cjk_font(FONT_CANDIDATES_SERIF, title_font_size)
+    f_tag = load_cjk_font(FONT_CANDIDATES_BOLD, 20)
+    f_meta = load_cjk_font(FONT_CANDIDATES_REG, 20)
+    f_singer = load_cjk_font(FONT_CANDIDATES_BOLD, 23)
+    f_band = load_cjk_font(FONT_CANDIDATES_REG, 18)
+
+    clean_credits = strip_non_bmp_emojis(credits_line)
+    clean_singer = strip_non_bmp_emojis(singer_line)
+    clean_band = strip_non_bmp_emojis(band_line)
+
+    tmp_draw = ImageDraw.Draw(card_img)
+    cx0, cy0, cy1 = 64, 595, 835
+    title_bbox = tmp_draw.textbbox((0, 0), song_title, font=f_song)
+    meta_x = cx0 + 64 + (title_bbox[2] - title_bbox[0])
+    cred_w = tmp_draw.textbbox((0, 0), clean_credits, font=f_meta)[2]
+    sing_w = tmp_draw.textbbox((0, 0), clean_singer, font=f_singer)[2]
+    band_w = tmp_draw.textbbox((0, 0), clean_band, font=f_band)[2]
+    cx1 = min(W - 64, max(840, meta_x + cred_w + 34, cx0 + 48 + sing_w + 34, cx0 + 48 + band_w + 34))
 
     shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     sh_draw = ImageDraw.Draw(shadow)
@@ -187,25 +209,17 @@ def build_tv_hud_overlays(
     card_img = Image.alpha_composite(card_img, shadow)
     c_draw = ImageDraw.Draw(card_img)
 
-    c_draw.rounded_rectangle((cx0, cy0, cx1, cy1), radius=18, fill=(12, 15, 24, 212), outline=(245, 198, 84, 215), width=2)
+    c_draw.rounded_rectangle((cx0, cy0, cx1, cy1), radius=18, fill=(12, 15, 24, 232), outline=(245, 198, 84, 225), width=2)
     c_draw.rounded_rectangle((cx0 + 22, cy0 + 24, cx0 + 30, cy1 - 24), radius=4, fill=(255, 204, 72, 255))
-
-    title_font_size = 46 if len(song_title) <= 8 else 36
-    f_song = load_cjk_font(FONT_CANDIDATES_SERIF, title_font_size)
-    f_tag = load_cjk_font(FONT_CANDIDATES_BOLD, 20)
-    f_meta = load_cjk_font(FONT_CANDIDATES_REG, 20)
 
     c_draw.rounded_rectangle((cx0 + 48, cy0 + 22, cx0 + 246, cy0 + 54), radius=6, fill=(255, 204, 72, 38), outline=(255, 204, 72, 160), width=1)
     c_draw.text((cx0 + 60, cy0 + 25), "原創競演單曲 #01", font=f_tag, fill=(255, 214, 102, 255))
     c_draw.text((cx0 + 44, cy0 + 66), song_title, font=f_song, fill=(255, 250, 235, 255))
-
-    title_bbox = c_draw.textbbox((0, 0), song_title, font=f_song)
-    meta_x = min(cx1 - 280, cx0 + 64 + (title_bbox[2] - title_bbox[0]))
-    c_draw.text((meta_x, cy0 + 82), strip_non_bmp_emojis(credits_line), font=f_meta, fill=(210, 218, 232, 240))
+    c_draw.text((meta_x, cy0 + 82), clean_credits, font=f_meta, fill=(210, 218, 232, 245))
 
     c_draw.line([(cx0 + 48, cy0 + 136), (cx1 - 30, cy0 + 136)], fill=(255, 204, 72, 80), width=1)
-    c_draw.text((cx0 + 48, cy0 + 148), strip_non_bmp_emojis(singer_line), font=load_cjk_font(FONT_CANDIDATES_BOLD, 23), fill=(255, 224, 130, 255))
-    c_draw.text((cx0 + 48, cy0 + 184), strip_non_bmp_emojis(band_line), font=load_cjk_font(FONT_CANDIDATES_REG, 18), fill=(215, 222, 235, 235))
+    c_draw.text((cx0 + 48, cy0 + 148), clean_singer, font=f_singer, fill=(255, 224, 130, 255))
+    c_draw.text((cx0 + 48, cy0 + 184), clean_band, font=f_band, fill=(215, 222, 235, 240))
 
     opening_png = out_dir / "hud_opening_card.png"
     card_img.save(opening_png)
