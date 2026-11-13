@@ -1,9 +1,11 @@
 # ⚡ 私有版免費中文 Suno 音樂 ＆ 真人全身動態 1080p MV 工作室
 
+🚀 **已部署專屬永久線上版（手機／電腦點開即用）**：[https://wplole--suno-killer-a100-mv-studio-web-studio.us-east.modal.run](https://wplole--suno-killer-a100-mv-studio-web-studio.us-east.modal.run)
+
 [![啟動路線 A：Modal A100 頂配一鍵部署器](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/WilliamPengWp/free-suno-mv-studio/blob/main/Modal_A100_Flagship_Deployer.ipynb)
 [![啟動路線 B：免註冊 Colab T4 入門版](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/WilliamPengWp/free-suno-mv-studio/blob/main/Free_Suno_MV_Studio.ipynb)
 
-**免買顯卡 · \$0 零自付 · 100% 商用無版權可開 YouTube 盈利 · 支援手機瀏覽器一鍵下載 MP4 / MP3**
+**免買顯卡 · $0 零自付 · 100% 商用無版權可開 YouTube 盈利 · 支援手機瀏覽器一鍵下載 MP4 / MP3**
 
 ---
 

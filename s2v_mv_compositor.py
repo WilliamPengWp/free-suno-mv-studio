@@ -140,7 +140,7 @@ def plan_s2v_timeline(
         return segments
 
     # Smart Hybrid S2V Mode (~$0.34/MV): 4 Hero Full-Body Singing Windows + Live Concert Cutaways
-    clip_dur = min(4.8, max(3.2, round(total_dur * 0.105, 2)))
+    clip_dur = min(3.85, max(3.2, round(total_dur * 0.082, 2)))
     anchors = [0.08, 0.31, 0.55, 0.78]
     s2v_windows = []
     last_end = 0.8

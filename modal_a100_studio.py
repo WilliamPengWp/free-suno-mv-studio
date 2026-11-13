@@ -46,6 +46,14 @@ VOL_MOUNT = "/vol"
 app = modal.App(APP_NAME)
 studio_vol = modal.Volume.from_name(VOLUME_NAME, create_if_missing=True)
 
+
+def _safe_vol_reload() -> None:
+    try:
+        studio_vol.reload()
+    except RuntimeError:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # Isolated Container Images (Zero Dependency Collisions Across 4 Models)
 # ---------------------------------------------------------------------------
@@ -137,6 +145,7 @@ svc_master_image = (
         "uv venv /opt/sep_venv",
         "uv pip install --python /opt/sep_venv/bin/python 'torch==2.4.1' 'audio-separator[gpu]>=0.30.0'",
         "git clone --depth 1 https://github.com/Plachtaa/seed-vc.git /opt/seed-vc",
+        "pip install --no-deps --force-reinstall 'protobuf>=4.25.3,<6.0.0'",
     )
     .env(
         {
@@ -152,7 +161,7 @@ svc_master_image = (
 # 3. Stage 3 Audio-Driven Full-Body Video Diffusion: Wan2.2-S2V-14B on A100-80GB
 wan_s2v_image = (
     modal.Image.from_registry("nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04", add_python="3.11")
-    .apt_install(*COMMON_APT, "libgl1", "libglib2.0-0")
+    .apt_install(*COMMON_APT, "libgl1", "libglib2.0-0", "build-essential", "clang")
     .pip_install(
         "torch==2.4.1",
         "torchvision==0.19.1",
@@ -196,7 +205,7 @@ wan_s2v_image = (
         "huggingface_hub[hf_transfer]>=0.30.0",
     )
     .run_commands(
-        "pip install 'https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1%2Bcu12torch2.4cxx11abiFALSE-cp311-cp311-linux_x86_64.whl'",
+        "pip install --no-deps 'https://github.com/Dao-AILab/flash-attention/releases/download/v2.6.3/flash_attn-2.6.3%2Bcu123torch2.4cxx11abiFALSE-cp311-cp311-linux_x86_64.whl' && pip install 'peft>=0.17.0' 'sentencepiece>=0.2.0'",
         "git clone --depth 1 https://github.com/Wan-Video/Wan2.2.git /opt/Wan2.2",
     )
     .env({"PYTHONPATH": "/opt/Wan2.2", "HF_HUB_ENABLE_HF_TRANSFER": "1", "PYTHONUNBUFFERED": "1"})
@@ -294,7 +303,7 @@ class AceStepXLComposer:
         from acestep.handler import AceStepHandler
         from acestep.llm_inference import LLMHandler
 
-        studio_vol.reload()
+        _safe_vol_reload()
         ckpt_src = Path(VOL_MOUNT) / "models" / "acestep_checkpoints"
         ckpt_link = Path("/opt/ACE-Step-1.5/checkpoints")
         if ckpt_src.exists():
@@ -347,7 +356,7 @@ class AceStepXLComposer:
         from acestep.inference import GenerationConfig, GenerationParams, generate_music
 
         ledger = BudgetLedger()
-        studio_vol.reload()
+        _safe_vol_reload()
         job_dir = Path(VOL_MOUNT) / "jobs" / job_id
         job_dir.mkdir(parents=True, exist_ok=True)
         out_dir = job_dir / "stage1_acestep"
@@ -424,7 +433,7 @@ def compose_yue2_song(
     from yue2 import YuE2Pipeline
 
     ledger = BudgetLedger()
-    studio_vol.reload()
+    _safe_vol_reload()
     job_dir = Path(VOL_MOUNT) / "jobs" / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
     yue_out = job_dir / "stage1_yue2"
@@ -468,7 +477,7 @@ def compose_yue2_song(
 # ---------------------------------------------------------------------------
 @app.function(
     image=svc_master_image,
-    gpu="L4",
+    gpu=["L4", "A10G", "L40S"],
     volumes={VOL_MOUNT: studio_vol},
     min_containers=0,
     max_containers=1,
@@ -490,7 +499,7 @@ def master_vocals_and_band(
     from mv_renderer import convert_wav_to_mp3
 
     ledger = BudgetLedger()
-    studio_vol.reload()
+    _safe_vol_reload()
     job_dir = Path(VOL_MOUNT) / "jobs" / job_id
     raw_wav = job_dir / "raw_song.wav"
     if not raw_wav.exists():
@@ -632,27 +641,44 @@ def master_vocals_and_band(
 # ---------------------------------------------------------------------------
 @app.cls(
     image=wan_s2v_image,
-    gpu="A100-80GB",
+    gpu=["H100", "A100-80GB", "L40S"],
     volumes={VOL_MOUNT: studio_vol},
     min_containers=0,
     max_containers=1,
     scaledown_window=20,
-    timeout=1200,
+    timeout=2400,
 )
 class WanS2VDirector:
     @modal.enter()
     def load_wan_s2v(self) -> None:
+        import torch
+
         sys.path.insert(0, "/opt/Wan2.2")
         import wan
         from wan.configs import MAX_AREA_CONFIGS, WAN_CONFIGS
 
-        studio_vol.reload()
+        _safe_vol_reload()
         ckpt_dir = Path(VOL_MOUNT) / "models" / "Wan2.2-S2V-14B"
         if not ckpt_dir.exists() or not any(ckpt_dir.iterdir()):
             raise RuntimeError(
                 "Wan2.2-S2V-14B weights not found on /vol/models/Wan2.2-S2V-14B. "
                 "Run CPU weight prefetch first so GPU seconds are never spent downloading!"
             )
+
+        self.gpu_name = torch.cuda.get_device_name(0)
+        vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+        self.is_80gb = vram_gb >= 70.0
+        if "H100" in self.gpu_name:
+            self.hw_tier = "H100"
+        elif self.is_80gb:
+            self.hw_tier = "A100-80GB"
+        else:
+            self.hw_tier = "L40S"
+        print(
+            f"[WanS2V] Initializing on {self.gpu_name} "
+            f"({vram_gb:.1f} GB VRAM, tier={self.hw_tier}, resident_gpu={self.is_80gb})",
+            flush=True,
+        )
 
         self.cfg = WAN_CONFIGS["s2v-14B"]
         self.max_area = MAX_AREA_CONFIGS["832*480"]
@@ -666,6 +692,7 @@ class WanS2VDirector:
             dit_fsdp=False,
             use_sp=False,
             t5_cpu=False,
+            init_on_cpu=(not self.is_80gb),
             convert_model_dtype=True,
         )
 
@@ -686,14 +713,25 @@ class WanS2VDirector:
         from s2v_mv_compositor import compose_broadcast_s2v_mv, plan_s2v_timeline
 
         ledger = BudgetLedger()
-        studio_vol.reload()
+        _safe_vol_reload()
         job_dir = Path(VOL_MOUNT) / "jobs" / job_id
+        job_dir.mkdir(parents=True, exist_ok=True)
         master_wav = job_dir / "mastered_song.wav"
         if not master_wav.exists():
-            master_wav = job_dir / "raw_song.wav"
+            alt_raw = job_dir / "raw_song.wav"
+            if alt_raw.exists():
+                master_wav = alt_raw
+            else:
+                # Warm container with mmap'd weights couldn't reload /vol: pull fresh WAV via clean CPU reader
+                wav_bytes = fetch_volume_file_bytes.remote(f"{VOL_MOUNT}/jobs/{job_id}/mastered_song.wav")
+                tmp_wav = Path("/tmp") / f"{job_id}_mastered.wav"
+                tmp_wav.write_bytes(wav_bytes)
+                master_wav = tmp_wav
 
-        s3_dir = job_dir / "stage3_s2v"
+        s3_dir = Path("/tmp") / f"s3_{job_id}"
         s3_dir.mkdir(parents=True, exist_ok=True)
+        clips_vol_dir = job_dir / "s2v_clips"
+        clips_vol_dir.mkdir(parents=True, exist_ok=True)
         final_mp4 = job_dir / "final_1080p_mv.mp4"
 
         custom_img = Path(custom_singer_img_vol_path) if (custom_singer_img_vol_path and Path(custom_singer_img_vol_path).exists()) else None
@@ -710,18 +748,30 @@ class WanS2VDirector:
         )
 
         base_seed = int(seed) if int(seed) >= 0 else int(time.time()) % 100000
+        s2v_segs = [s for s in segments if s.kind == "wan_s2v" and s.audio_slice_path]
 
         with MeteredStageContext(
             ledger,
             stage_name=f"Stage3_Wan2.2_S2V_14B_{video_mode}",
-            hardware_tier="A100-80GB",
+            hardware_tier=getattr(self, "hw_tier", "A100-80GB"),
             is_gpu=True,
             increment_jobs=True,
         ):
-            for seg in segments:
-                if seg.kind != "wan_s2v" or not seg.audio_slice_path:
-                    continue
+            for clip_num, seg in enumerate(s2v_segs, start=1):
+                clip_vol = clips_vol_dir / f"wan_raw_{seg.seg_idx:03d}.mp4"
                 clip_out = s3_dir / f"wan_raw_{seg.seg_idx:03d}.mp4"
+                if clip_vol.exists() and clip_vol.stat().st_size > 12000:
+                    print(f"[WanS2V] Reusing checkpointed clip {clip_num}/{len(s2v_segs)}: {clip_vol.name}", flush=True)
+                    shutil.copyfile(clip_vol, clip_out)
+                    seg.rendered_clip_path = clip_out
+                    continue
+
+                t_clip = time.time()
+                print(
+                    f"[WanS2V] Diffusing hero singing clip {clip_num}/{len(s2v_segs)} "
+                    f"[{seg.t_start:.2f}s..{seg.t_end:.2f}s] ({seg.image_path.name})...",
+                    flush=True,
+                )
                 video_tensor = self.pipeline.generate(
                     input_prompt=seg.prompt,
                     ref_image_path=str(seg.image_path),
@@ -733,13 +783,13 @@ class WanS2VDirector:
                     num_repeat=1 if video_mode == "smart_hybrid_s2v" else None,
                     pose_video=None,
                     max_area=self.max_area,
-                    infer_frames=80,
+                    infer_frames=64,
                     shift=3.0,
                     sample_solver="unipc",
-                    sampling_steps=26,
+                    sampling_steps=16,
                     guide_scale=getattr(self.cfg, "sample_guide_scale", 4.5),
                     seed=base_seed + seg.seg_idx,
-                    offload_model=True,
+                    offload_model=(not self.is_80gb),
                     init_first_frame=False,
                 )
                 save_video(
@@ -752,8 +802,16 @@ class WanS2VDirector:
                 )
                 del video_tensor
                 torch.cuda.empty_cache()
+                shutil.copyfile(clip_out, clip_vol)
+                studio_vol.commit()
                 seg.rendered_clip_path = clip_out
+                print(
+                    f"[WanS2V] Finished clip {clip_num}/{len(s2v_segs)} in {time.time() - t_clip:.1f}s "
+                    f"({clip_out.stat().st_size} bytes)",
+                    flush=True,
+                )
 
+            print("[WanS2V] Compositing 1080p30 broadcast multi-camera MV + KTV ASS...", flush=True)
             compose_broadcast_s2v_mv(
                 master_audio_path=master_wav,
                 segments=segments,
@@ -765,6 +823,7 @@ class WanS2VDirector:
                 work_dir=s3_dir / "compositor",
             )
             studio_vol.commit()
+            print(f"[WanS2V] Completed 1080p MV: {final_mp4} ({final_mp4.stat().st_size} bytes)", flush=True)
             return str(final_mp4)
 
 
@@ -886,7 +945,7 @@ def _render_budget_banner_html(state: Dict[str, Any], est_usd: float, est_mvs: i
     min_containers=0,
     max_containers=1,
     scaledown_window=120,
-    timeout=1800,
+    timeout=2700,
 )
 @modal.concurrent(max_inputs=16)
 @modal.asgi_app()
@@ -1038,7 +1097,7 @@ def web_studio():
         # Stage 3: Wan2.2-S2V-14B Full-Body Singing Video Diffusion (A100-80GB) OR Fast CPU Ken Burns
         if vid_key == "ken_burns_only":
             progress(0.75, desc="Stage 3/4：正在渲染 1080p 舞台運鏡與 KTV 流光字幕（零 A100 消耗模式）...")
-            studio_vol.reload()
+            _safe_vol_reload()
             final_mp4_vol = job_dir / "final_1080p_mv.mp4"
             render_full_mv(
                 audio_path=Path(master_wav_str),
@@ -1065,15 +1124,20 @@ def web_studio():
             final_mp4_vol = Path(final_mp4_str)
 
         progress(0.96, desc="Stage 4/4：正在同步成品供手機與電腦一鍵直接下載...")
-        studio_vol.reload()
+        _safe_vol_reload()
         safe_slug = re.sub(r"[^\w\u4e00-\u9fff-]+", "_", (song_title or "pro_mv").strip())[:24] or "pro_mv"
         dl_mp4 = local_dl_dir / f"{safe_slug}_{job_id}.mp4"
         dl_mp3 = local_dl_dir / f"{safe_slug}_{job_id}.mp3"
-        shutil.copyfile(final_mp4_vol, dl_mp4)
+        if final_mp4_vol.exists():
+            shutil.copyfile(final_mp4_vol, dl_mp4)
+        else:
+            dl_mp4.write_bytes(fetch_volume_file_bytes.remote(str(final_mp4_vol)))
         if Path(master_mp3_str).exists():
             shutil.copyfile(master_mp3_str, dl_mp3)
-        else:
+        elif Path(master_wav_str).exists():
             convert_wav_to_mp3(Path(master_wav_str), dl_mp3)
+        else:
+            dl_mp3.write_bytes(fetch_volume_file_bytes.remote(str(master_mp3_str)))
 
         st_after = ledger.get_state()
         banner = _render_budget_banner_html(st_after, est.total_estimated_usd, est.est_mvs_per_month_at_24_cap)
@@ -1188,7 +1252,7 @@ def web_studio():
     timeout=300,
 )
 def fetch_volume_file_bytes(vol_path: str) -> bytes:
-    studio_vol.reload()
+    _safe_vol_reload()
     return Path(vol_path).read_bytes()
 
 
