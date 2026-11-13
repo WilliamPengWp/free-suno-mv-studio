@@ -68,13 +68,20 @@ cpu_web_image = (
 
 # 1A. Stage 1 Composer: ACE-Step 1.5 XL (4B DiT SFT + 4B CoT Planner LM) on L40S 48GB
 acestep_xl_image = (
-    modal.Image.from_registry("nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04", add_python="3.11")
+    modal.Image.debian_slim(python_version="3.11")
     .apt_install(*COMMON_APT)
     .run_commands("git clone --depth 1 https://github.com/ace-step/ACE-Step-1.5.git /opt/ACE-Step-1.5")
     .pip_install("uv")
     .run_commands(
-        "uv pip install --system --no-build-isolation -e /opt/ACE-Step-1.5",
-        "uv pip install --system 'huggingface_hub[hf_transfer]>=0.30.0' soundfile librosa pillow",
+        "uv pip install --system --extra-index-url https://download.pytorch.org/whl/cu128 "
+        "torch==2.10.0 torchvision==0.25.0 torchaudio==2.10.0 "
+        "'transformers>=4.51.0,<4.58.0' 'diffusers>=0.37.0' 'matplotlib>=3.7.5' "
+        "'scipy>=1.10.1' 'soundfile>=0.13.1' 'loguru>=0.7.3' 'einops>=0.8.1' "
+        "'accelerate>=1.12.0' diskcache 'numba>=0.63.1' 'vector-quantize-pytorch>=1.27.15' "
+        "'torchcodec>=0.9.1' 'torchao>=0.16.0,<0.17.0' toml 'peft>=0.18.0' lycoris-lora "
+        "'lightning>=2.0.0' modelscope 'typer-slim>=0.21.1' 'pytorch-wavelets>=1.3.0' "
+        "'pywavelets>=1.9.0' 'huggingface_hub[hf_transfer]>=0.30.0' librosa 'pillow>=10.3.0'",
+        "uv pip install --system --no-deps -e /opt/ACE-Step-1.5/acestep/third_parts/nano-vllm -e /opt/ACE-Step-1.5",
     )
     .env({"ACESTEP_ROOT": "/opt/ACE-Step-1.5", "HF_HUB_ENABLE_HF_TRANSFER": "1", "PYTHONUNBUFFERED": "1"})
     .add_local_python_source("budget_guard", "mv_renderer", "s2v_mv_compositor")
@@ -97,10 +104,11 @@ yue2_image = (
     .add_local_dir(STUDIO_DIR / "assets", remote_path="/root/assets")
 )
 
-# 2. Stage 2 Vocal Mastering: BS-RoFormer Stem Separation + Plachtaa/Seed-VC 44.1kHz BigVGAN on L4 24GB
+# 2. Stage 2 Vocal Mastering: BS-RoFormer Stem Separation (/opt/sep_venv) + Plachtaa/Seed-VC 44.1kHz BigVGAN on L4 24GB
 svc_master_image = (
-    modal.Image.debian_slim(python_version="3.10")
+    modal.Image.debian_slim(python_version="3.11")
     .apt_install(*COMMON_APT, "libportaudio2")
+    .pip_install("uv")
     .pip_install(
         "torch==2.4.1",
         "torchvision==0.19.1",
@@ -123,10 +131,13 @@ svc_master_image = (
         "hydra-core==1.3.2",
         "pyyaml",
         "python-dotenv",
-        "audio-separator[gpu]>=0.28.0",
         "pillow>=10.3.0",
     )
-    .run_commands("git clone --depth 1 https://github.com/Plachtaa/seed-vc.git /opt/seed-vc")
+    .run_commands(
+        "uv venv /opt/sep_venv",
+        "uv pip install --python /opt/sep_venv/bin/python 'torch==2.4.1' 'audio-separator[gpu]>=0.30.0'",
+        "git clone --depth 1 https://github.com/Plachtaa/seed-vc.git /opt/seed-vc",
+    )
     .env(
         {
             "HF_HOME": f"{VOL_MOUNT}/models/seed-vc-hf",
@@ -140,8 +151,8 @@ svc_master_image = (
 
 # 3. Stage 3 Audio-Driven Full-Body Video Diffusion: Wan2.2-S2V-14B on A100-80GB
 wan_s2v_image = (
-    modal.Image.from_registry("nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04", add_python="3.11")
-    .apt_install(*COMMON_APT, "libgl1", "libglib2.0-0", "build-essential")
+    modal.Image.from_registry("nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04", add_python="3.11")
+    .apt_install(*COMMON_APT, "libgl1", "libglib2.0-0")
     .pip_install(
         "torch==2.4.1",
         "torchvision==0.19.1",
@@ -185,7 +196,7 @@ wan_s2v_image = (
         "huggingface_hub[hf_transfer]>=0.30.0",
     )
     .run_commands(
-        "pip install flash-attn --no-build-isolation || true",
+        "pip install 'https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1%2Bcu12torch2.4cxx11abiFALSE-cp311-cp311-linux_x86_64.whl'",
         "git clone --depth 1 https://github.com/Wan-Video/Wan2.2.git /opt/Wan2.2",
     )
     .env({"PYTHONPATH": "/opt/Wan2.2", "HF_HUB_ENABLE_HF_TRANSFER": "1", "PYTHONUNBUFFERED": "1"})
@@ -211,6 +222,7 @@ def prefetch_weights_cpu(targets: Optional[List[str]] = None) -> Dict[str, str]:
     Downloads huge model checkpoints onto persistent Modal Volume using 4 CPU cores (~$0.015 total)
     so A100-80GB / L40S GPUs NEVER waste $2.50/hr waiting on Hugging Face downloads!
     """
+    import json
     from huggingface_hub import snapshot_download
 
     ledger = BudgetLedger()
@@ -234,6 +246,16 @@ def prefetch_weights_cpu(targets: Optional[List[str]] = None) -> Dict[str, str]:
                 dst = ace_ckpts / folder
                 if not dst.exists() or not any(dst.iterdir()):
                     snapshot_download(sub_repo, local_dir=str(dst))
+            for lm_folder in ("acestep-5Hz-lm-4B", "acestep-5Hz-lm-1.7B"):
+                cfg_p = ace_ckpts / lm_folder / "config.json"
+                if cfg_p.exists():
+                    try:
+                        cfg_obj = json.loads(cfg_p.read_text(encoding="utf-8"))
+                        if cfg_obj.get("architectures") == ["Qwen3Model"]:
+                            cfg_obj["architectures"] = ["Qwen3ForCausalLM"]
+                            cfg_p.write_text(json.dumps(cfg_obj, indent=2), encoding="utf-8")
+                    except Exception:
+                        pass
             report["ace_xl"] = "ready"
 
         if "yue2" in wanted:
@@ -464,7 +486,7 @@ def master_vocals_and_band(
     2. Optionally runs Plachtaa/Seed-VC 44.1kHz BigVGAN Singing Voice Conversion (`f0-condition=True`).
     3. Applies analog tube grit + 220Hz chest body + 3.2kHz presence + broadcast -13 LUFS loudness master.
     """
-    from audio_separator.separator import Separator
+    import json
     from mv_renderer import convert_wav_to_mp3
 
     ledger = BudgetLedger()
@@ -498,16 +520,29 @@ def master_vocals_and_band(
         sep_model_dir = Path(VOL_MOUNT) / "models" / "audio-separator"
         sep_model_dir.mkdir(parents=True, exist_ok=True)
 
-        sep = Separator(output_dir=str(s2_dir), model_file_dir=str(sep_model_dir), output_format="WAV")
-        sep.load_model(model_filename="model_bs_roformer_ep_317_sdr_12.9755.ckpt")
-        out_files = sep.separate(str(raw_wav))
+        sep_script = (
+            "import json, sys; from audio_separator.separator import Separator; "
+            "sep = Separator(output_dir=sys.argv[1], model_file_dir=sys.argv[2], output_format='WAV'); "
+            "sep.load_model(model_filename='model_bs_roformer_ep_317_sdr_12.9755.ckpt'); "
+            "print('SEP_JSON:' + json.dumps(sep.separate(sys.argv[3])))"
+        )
+        sep_proc = subprocess.run(
+            ["/opt/sep_venv/bin/python", "-c", sep_script, str(s2_dir), str(sep_model_dir), str(raw_wav)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        out_files: List[str] = []
+        for line in (sep_proc.stdout or "").splitlines():
+            if line.startswith("SEP_JSON:"):
+                out_files = json.loads(line[len("SEP_JSON:"):])
 
         vocal_stem: Optional[Path] = None
         inst_stem: Optional[Path] = None
         for f in out_files:
             fp = Path(f) if Path(f).is_absolute() else (s2_dir / f)
             low = fp.name.lower()
-            if "vocal" in low:
+            if "vocal" in low and "no_vocal" not in low:
                 vocal_stem = fp
             elif "inst" in low or "other" in low or "no_vocal" in low:
                 inst_stem = fp
@@ -602,7 +637,7 @@ def master_vocals_and_band(
     min_containers=0,
     max_containers=1,
     scaledown_window=20,
-    timeout=900,
+    timeout=1200,
 )
 class WanS2VDirector:
     @modal.enter()
@@ -620,7 +655,7 @@ class WanS2VDirector:
             )
 
         self.cfg = WAN_CONFIGS["s2v-14B"]
-        self.max_area = MAX_AREA_CONFIGS["1024*704"]
+        self.max_area = MAX_AREA_CONFIGS["832*480"]
         self.ckpt_dir = str(ckpt_dir)
         self.pipeline = wan.WanS2V(
             config=self.cfg,
@@ -695,13 +730,13 @@ class WanS2VDirector:
                     tts_prompt_audio=None,
                     tts_prompt_text=None,
                     tts_text=None,
-                    num_repeat=None,
+                    num_repeat=1 if video_mode == "smart_hybrid_s2v" else None,
                     pose_video=None,
                     max_area=self.max_area,
                     infer_frames=80,
-                    shift=getattr(self.cfg, "sample_shift", 3.0),
+                    shift=3.0,
                     sample_solver="unipc",
-                    sampling_steps=getattr(self.cfg, "sample_steps", 30),
+                    sampling_steps=26,
                     guide_scale=getattr(self.cfg, "sample_guide_scale", 4.5),
                     seed=base_seed + seg.seg_idx,
                     offload_model=True,
