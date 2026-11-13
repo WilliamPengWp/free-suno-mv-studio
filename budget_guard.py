@@ -36,7 +36,7 @@ MODAL_RATES_USD_PER_SEC: Dict[str, float] = {
 MODAL_STARTER_FREE_CREDIT_USD: float = 30.00
 DEFAULT_SAFE_MONTHLY_CAP_USD: float = 24.00
 ABSOLUTE_MAX_MONTHLY_CAP_USD: float = 27.00  # Hard code ceiling: NEVER allow > $27 out of $30 free credit
-MIN_CONFIGURABLE_CAP_USD: float = 5.00
+MIN_CONFIGURABLE_CAP_USD: float = 1.00
 MAX_SINGLE_JOB_USD: float = 1.50
 
 # Conservative safety margin so our internal ledger ALWAYS trips BEFORE Modal's real billing meter
