@@ -9,5 +9,5 @@ mv_outputs/
 *.wav
 *.mp3
 !assets/vocal_seeds/*.wav
-!downloads/*
-
+!downloads/README.md
+!downloads/*.mp3

@@ -527,11 +527,35 @@ def render_full_mv(
     if progress_cb:
         progress_cb(1.0, "1080p 動態背景 MV 合成完成！")
 
-    # Enforce at most 3 MP4 files in downloads/ directory to respect GitHub storage limits
+    # Upload rendered MP4 to Google Drive folder and enforce local retention limit
     if output_mp4.parent.name == "downloads":
+        upload_to_gdrive(output_mp4)
         enforce_max_downloads(output_mp4.parent, max_keep=3)
 
     return output_mp4
+
+
+GDRIVE_FOLDER_ID = os.environ.get("S2V_GDRIVE_FOLDER_ID", "1cpVuNRdwdwi0I-ramuyF5Dc7vhFdx8L3")
+
+
+def upload_to_gdrive(file_path: Path, folder_id: str = GDRIVE_FOLDER_ID) -> Optional[str]:
+    """Uploads a rendered MP4/MP3 file to Google Drive via the gdrive CLI if available."""
+    gdrive_bin = shutil.which("gdrive")
+    if not gdrive_bin or not folder_id or not Path(file_path).exists():
+        return None
+    try:
+        res = subprocess.run(
+            [gdrive_bin, "mutate", "upload", str(file_path), "--parent", folder_id],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+        if res.returncode == 0:
+            return res.stdout.strip()
+    except Exception:
+        pass
+    return None
 
 
 def enforce_max_downloads(downloads_dir: Path, max_keep: int = 3) -> List[Path]:
@@ -549,5 +573,3 @@ def enforce_max_downloads(downloads_dir: Path, max_keep: int = 3) -> List[Path]:
         except OSError:
             pass
     return removed
-
-
