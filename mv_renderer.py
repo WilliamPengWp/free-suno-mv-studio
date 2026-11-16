@@ -526,5 +526,28 @@ def render_full_mv(
 
     if progress_cb:
         progress_cb(1.0, "1080p 動態背景 MV 合成完成！")
+
+    # Enforce at most 3 MP4 files in downloads/ directory to respect GitHub storage limits
+    if output_mp4.parent.name == "downloads":
+        enforce_max_downloads(output_mp4.parent, max_keep=3)
+
     return output_mp4
+
+
+def enforce_max_downloads(downloads_dir: Path, max_keep: int = 3) -> List[Path]:
+    """Keeps at most `max_keep` newest .mp4 files in `downloads_dir`, removing older ones."""
+    mp4_files = sorted(
+        Path(downloads_dir).glob("*.mp4"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    removed: List[Path] = []
+    for old_mp4 in mp4_files[max_keep:]:
+        try:
+            old_mp4.unlink()
+            removed.append(old_mp4)
+        except OSError:
+            pass
+    return removed
+
 
