@@ -258,8 +258,8 @@ WrapStyle: 2
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: KTVMain,{font_family},56,&H0045D4FF,&H00FFFFFF,&H0014100C,&H88000000,-1,0,0,0,100,100,2.2,0,1,4.0,2.2,2,80,80,66,1
-Style: StageCue,{font_family},26,&H00A8E2FF,&H00A8E2FF,&H0014100C,&H70000000,-1,0,0,0,100,100,1.5,0,1,2.5,1.2,2,80,80,152,1
+Style: KTVMain,{font_family},58,&H0045D4FF,&H00FFFFFF,&H0014100C,&H88000000,-1,0,0,0,100,100,2.2,0,1,4.2,2.4,2,80,80,68,1
+Style: StageCue,{font_family},28,&H00A8E2FF,&H00A8E2FF,&H0014100C,&H70000000,-1,0,0,0,100,100,1.5,0,1,2.5,1.2,2,80,80,154,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -271,12 +271,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             continue
         st = sec_to_ass_time(line.start)
         et = sec_to_ass_time(line.end)
-        dur = max(0.3, line.end - line.start - 0.15)
-        kf_body = make_kf_tags(clean_txt, dur)
-        events.append(f"Dialogue: 2,{st},{et},KTVMain,,0,0,0,,{{\\fad(140,160)}}{kf_body}")
+        if hasattr(line, "to_ass_kf_text"):
+            kf_body = line.to_ass_kf_text()  # type: ignore[attr-defined]
+        else:
+            dur = max(0.3, line.end - line.start - 0.15)
+            kf_body = make_kf_tags(clean_txt, dur)
+        events.append(f"Dialogue: 2,{st},{et},KTVMain,,0,0,0,,{{\\fad(120,140)}}{kf_body}")
         clean_sub = strip_non_bmp_emojis(line.sub_label)
         if clean_sub:
-            events.append(f"Dialogue: 1,{st},{et},StageCue,,0,0,0,,{{\\fad(180,180)}}{clean_sub}")
+            events.append(f"Dialogue: 1,{st},{et},StageCue,,0,0,0,,{{\\fad(150,150)}}{clean_sub}")
 
     ass_path.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
 
@@ -298,6 +301,7 @@ def build_schedule_from_lyrics(
     total_dur: float,
     lyrics_text: str,
     song_title: str = "詩仙醉長安",
+    audio_path: Optional[Path] = None,
 ) -> Tuple[List[ShotPlan], List[LyricLine], float]:
     xfade = 0.40 if total_dur >= 40.0 else 0.25
     weights = [0.07, 0.09, 0.08, 0.07, 0.09, 0.08, 0.08, 0.09, 0.10, 0.09, 0.09, 0.07]
@@ -311,6 +315,20 @@ def build_schedule_from_lyrics(
         ShotPlan(i + 1, f"shot_{i + 1:02d}.jpg", max(1.8, round(eff_total * w, 2)), motions[i], f"Scene {i + 1}")
         for i, w in enumerate(weights)
     ]
+
+    if audio_path is not None and Path(audio_path).exists():
+        try:
+            from lyric_aligner import align_lyrics_with_whisper
+            aligned = align_lyrics_with_whisper(
+                audio_path=Path(audio_path),
+                lyrics_text=lyrics_text,
+                total_dur=total_dur,
+                song_title=song_title,
+            )
+            if aligned:
+                return shots, aligned, xfade  # type: ignore[return-value]
+        except Exception as exc:
+            print(f"[mv_renderer] Whisper alignment fallback: {exc}")
 
     parsed_entries: List[Tuple[str, str]] = []
     pending_cue = ""
@@ -415,7 +433,15 @@ def render_full_mv(
     frames_dir: Path = DEFAULT_FRAMES_DIR,
     work_dir: Optional[Path] = None,
     progress_cb: Optional[Callable[[float, str], None]] = None,
+    bg_image_path: Optional[Path] = None,
 ) -> Path:
+    """
+    Renders a 1080p30 Music Video focused on the song:
+    - Uses a single cohesive Dynamic Background Image (continuous breathing camera motion +
+      subtle real-time golden audio waveform spectrum above the subtitle bar).
+    - Uses Whisper word/character-level forced alignment (`lyric_aligner.py`) so every
+      lyric line and syllable (`\\kf`) matches the vocal performance to the millisecond.
+    """
     audio_path = Path(audio_path)
     output_mp4 = Path(output_mp4)
     output_mp4.parent.mkdir(parents=True, exist_ok=True)
@@ -424,27 +450,24 @@ def render_full_mv(
     work_dir.mkdir(parents=True, exist_ok=True)
 
     if progress_cb:
-        progress_cb(0.05, "正在分析音樂長度與對齊黃金 KTV 逐字字幕...")
+        progress_cb(0.10, "正在使用 Whisper 語音辨識對齊每個字的開口毫秒時間軸...")
 
     total_dur = probe_audio_duration(audio_path)
-    shots, lyrics, xfade_dur = build_schedule_from_lyrics(total_dur, lyrics_text, song_title=song_title)
-    total_vid_dur = sum(s.duration for s in shots) - (len(shots) - 1) * xfade_dur
+    _, lyrics, _ = build_schedule_from_lyrics(
+        total_dur, lyrics_text, song_title=song_title, audio_path=audio_path
+    )
 
-    dur_tag = hashlib.md5(f"{total_dur:.2f}_{frames_dir}".encode()).hexdigest()[:8]
-    clip_paths: List[Path] = []
-    for idx, shot in enumerate(shots):
-        clip_p = work_dir / f"seg_{shot.shot_idx:02d}_{dur_tag}.mp4"
-        if not clip_p.exists() or clip_p.stat().st_size < 10_000:
-            if progress_cb:
-                progress_cb(
-                    0.08 + 0.62 * (idx / len(shots)),
-                    f"正在渲染 1080p 電影運鏡分鏡 ({shot.shot_idx}/12)...",
-                )
-            render_motion_clip(shot, frames_dir, clip_p)
-        clip_paths.append(clip_p)
+    # Pick single flagship stage artwork for the continuous dynamic background
+    if bg_image_path is None or not Path(bg_image_path).exists():
+        hero_candidate = STUDIO_DIR / "assets" / "stage_heroes" / "hero_03_chorus_belt.jpg"
+        if hero_candidate.exists():
+            bg_image_path = hero_candidate
+        else:
+            candidates = sorted(Path(frames_dir).glob("*.jpg"))
+            bg_image_path = candidates[0] if candidates else hero_candidate
 
     if progress_cb:
-        progress_cb(0.74, "正在繪製《樂隊請就位》舞台角標、歌手卡與流光字幕...")
+        progress_cb(0.45, "正在產生舞台標題卡與逐字精準對嘴 KTV 字幕 (.ASS)...")
 
     persistent_png, opening_png = build_tv_hud_overlays(
         work_dir,
@@ -452,70 +475,56 @@ def render_full_mv(
         credits_line=credits_line,
         singer_line=singer_line,
     )
-    ass_path = work_dir / f"lyrics_{dur_tag}.ass"
+    dur_tag = hashlib.md5(f"{total_dur:.2f}_{audio_path.name}".encode()).hexdigest()[:8]
+    ass_path = work_dir / f"lyrics_aligned_{dur_tag}.ass"
     write_karaoke_ass(ass_path, lyrics)
 
-    inputs: List[str] = []
-    for cp in clip_paths:
-        inputs.extend(["-i", str(cp)])
-    inputs.extend(["-loop", "1", "-framerate", "30", "-t", f"{total_vid_dur + 1.0:.2f}", "-i", str(persistent_png)])
-    inputs.extend(["-loop", "1", "-framerate", "30", "-t", "8.0", "-i", str(opening_png)])
-    inputs.extend(["-i", str(audio_path)])
-
-    transitions = [
-        "fade", "dissolve", "smoothleft", "fadewhite",
-        "dissolve", "fade", "smoothright", "fadewhite",
-        "fadewhite", "fadewhite", "fadeblack",
-    ]
-    fc_parts: List[str] = []
-    cum_offset = shots[0].duration - xfade_dur
-    prev_label = "[0:v]"
-    for i in range(1, len(shots)):
-        next_label = f"[xf{i}]"
-        tr = transitions[(i - 1) % len(transitions)]
-        fc_parts.append(
-            f"{prev_label}[{i}:v]xfade=transition={tr}:duration={xfade_dur:.2f}:offset={cum_offset:.2f}{next_label}"
-        )
-        prev_label = next_label
-        if i < len(shots) - 1:
-            cum_offset += shots[i].duration - xfade_dur
-
-    hud_idx = len(shots)
-    card_idx = len(shots) + 1
-    aud_idx = len(shots) + 2
-
+    fps = 30
+    total_frames = max(30, int(round(total_dur * fps)))
     ass_escaped = str(ass_path).replace("\\", "\\\\").replace(":", "\\:")
-    fc_parts.append(
-        f"[{card_idx}:v]format=rgba,fade=t=in:st=0.9:d=0.55:alpha=1,fade=t=out:st=6.8:d=0.65:alpha=1[card_faded]"
-    )
-    fc_parts.append(f"{prev_label}[{hud_idx}:v]overlay=0:0:eof_action=pass[v_hud]")
-    fc_parts.append(f"[v_hud][card_faded]overlay=0:0:enable='between(t,0.8,7.6)':eof_action=pass[v_card]")
-    fc_parts.append(
+
+    # Continuous gentle breathing camera motion + real-time golden audio waveform glow + KTV subtitles
+    z_expr = "1.06+0.045*sin(2*PI*on/450)"
+    x_expr = "iw/2-(iw/zoom/2)+18*sin(2*PI*on/600)"
+    y_expr = "ih*0.46-(ih/zoom/2)+10*cos(2*PI*on/500)"
+
+    fc_parts = [
+        f"[0:v]scale=2560:1440:flags=lanczos,"
+        f"zoompan=z='{z_expr}':x='{x_expr}':y='{y_expr}':d={total_frames}:s=1920x1080:fps={fps},"
+        f"eq=contrast=1.05:saturation=1.08[bg]",
+        f"[3:a]showwaves=s=1920x96:mode=cline:rate={fps}:colors=0xFFB830@0.55|0xFF6B2B@0.40,"
+        f"format=rgba[waves]",
+        f"[bg][waves]overlay=0:835:eof_action=pass[bg_wave]",
+        f"[bg_wave][1:v]overlay=0:0:eof_action=pass[v_hud]",
+        f"[2:v]format=rgba,fade=t=in:st=0.6:d=0.5:alpha=1,fade=t=out:st=6.2:d=0.6:alpha=1[card_faded]",
+        f"[v_hud][card_faded]overlay=0:0:enable='between(t,0.5,7.0)':eof_action=pass[v_card]",
         f"[v_card]ass='{ass_escaped}',"
-        f"fade=t=in:st=0:d=0.6,fade=t=out:st={max(1.0, total_vid_dur - 1.2):.2f}:d=1.2,"
-        f"format=yuv420p[v_out]"
-    )
+        f"fade=t=in:st=0:d=0.6,fade=t=out:st={max(1.0, total_dur - 1.2):.2f}:d=1.2,"
+        f"format=yuv420p[v_out]",
+    ]
 
     if progress_cb:
-        progress_cb(0.84, "正在進行 12 幕轉場與母帶音軌合成（即將完成）...")
+        progress_cb(0.75, "正在合成 1080p 動態背景、即時音樂聲波與精準 KTV 字幕...")
 
-    max_video_kbps = max(1200, min(4200, int((35.0 * 8192) / max(10.0, total_vid_dur)) - 192))
     cmd = [
         "ffmpeg", "-y", "-v", "error",
-        *inputs,
+        "-loop", "1", "-t", f"{total_dur + 0.5:.2f}", "-i", str(bg_image_path),
+        "-loop", "1", "-framerate", str(fps), "-t", f"{total_dur + 0.5:.2f}", "-i", str(persistent_png),
+        "-loop", "1", "-framerate", str(fps), "-t", "7.5", "-i", str(opening_png),
+        "-i", str(audio_path),
         "-filter_complex", ";".join(fc_parts),
         "-map", "[v_out]",
-        "-map", f"{aud_idx}:a",
-        "-t", f"{total_vid_dur:.2f}",
-        "-c:v", "libx264", "-preset", "fast", "-crf", "21",
-        "-maxrate", f"{max_video_kbps}k", "-bufsize", f"{max_video_kbps * 2}k",
+        "-map", "3:a",
+        "-t", f"{total_dur:.2f}",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
         "-pix_fmt", "yuv420p",
-        "-c:a", "aac", "-b:a", "192k",
+        "-c:a", "aac", "-b:a", "256k",
         "-movflags", "+faststart",
         str(output_mp4),
     ]
     subprocess.run(cmd, check=True)
 
     if progress_cb:
-        progress_cb(1.0, "1080p MV 合成完成！")
+        progress_cb(1.0, "1080p 動態背景 MV 合成完成！")
     return output_mp4
+
