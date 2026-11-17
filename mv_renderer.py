@@ -427,9 +427,12 @@ def render_full_mv(
     audio_path: Path,
     output_mp4: Path,
     lyrics_text: str,
-    song_title: str = "詩仙醉長安",
-    singer_line: str = "主唱：詩仙·李白（太白居士）",
-    credits_line: str = "詞曲：100% 原創搖滾 × 唐詩公有領域",
+    song_title: str = "原創單曲",
+    singer_line: str = "主唱：原創男聲",
+    credits_line: str = "詞曲：100% 原創音樂",
+    band_line: str = "編曲：史坦威大三角鋼琴 × 獨奏大提琴 × 室內交響弦樂團",
+    show_title: str = "深夜音樂室",
+    show_subtitle: str = "｜原創抒情純享舞台",
     frames_dir: Path = DEFAULT_FRAMES_DIR,
     work_dir: Optional[Path] = None,
     progress_cb: Optional[Callable[[float, str], None]] = None,
@@ -457,13 +460,18 @@ def render_full_mv(
         total_dur, lyrics_text, song_title=song_title, audio_path=audio_path
     )
 
-    # Pick single flagship stage artwork for the continuous dynamic background
-    if bg_image_path is None or not Path(bg_image_path).exists():
-        hero_candidate = STUDIO_DIR / "assets" / "stage_heroes" / "hero_03_chorus_belt.jpg"
-        if hero_candidate.exists():
-            bg_image_path = hero_candidate
+    # Pick single stage artwork for the continuous dynamic background:
+    # 1. Explicit bg_image_path
+    # 2. Custom frames_dir if provided and non-default (or contains stage_*.jpg)
+    # 3. Fallback to default frames
+    if bg_image_path is not None and Path(bg_image_path).exists():
+        bg_image_path = Path(bg_image_path)
+    else:
+        candidates = sorted(Path(frames_dir).glob("*.jpg")) + sorted(Path(frames_dir).glob("*.png"))
+        if candidates and Path(frames_dir).resolve() != DEFAULT_FRAMES_DIR.resolve():
+            bg_image_path = candidates[0]
         else:
-            candidates = sorted(Path(frames_dir).glob("*.jpg"))
+            hero_candidate = STUDIO_DIR / "assets" / "stage_heroes" / "hero_03_chorus_belt.jpg"
             bg_image_path = candidates[0] if candidates else hero_candidate
 
     if progress_cb:
@@ -474,6 +482,9 @@ def render_full_mv(
         song_title=song_title,
         credits_line=credits_line,
         singer_line=singer_line,
+        band_line=band_line,
+        show_title=show_title,
+        show_subtitle=show_subtitle,
     )
     dur_tag = hashlib.md5(f"{total_dur:.2f}_{audio_path.name}".encode()).hexdigest()[:8]
     ass_path = work_dir / f"lyrics_aligned_{dur_tag}.ass"
