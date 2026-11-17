@@ -8,7 +8,16 @@
 
 ---
 
-## 🎯 最新版（字幕 100% 精準對齊音樂 × 單一動態背景聲波版）：《醉月長安》
+## 🌧️ 最新主打（現代都會深夜鋼琴弦樂男聲抒情 × Whisper 逐字對齊）：《末班車的雨》
+- **曲風與製作規格**：
+  - **編曲與唱腔（`68 BPM · F# Minor · 60s`）**：`ACE-Step 1.5 XL`（4B SFT + 4B 旋律規劃）史坦威大三角鋼琴分解和弦開場 → 溫暖磁性男中音近麥氣音自白 → 預副歌獨奏大提琴（Solo Cello）低吟推進 → 副歌全編制交響弦樂與真假音微沙啞哭腔爆發（`BS-RoFormer` 分軌 + 真空管膽機暖度與板式混響母帶）。
+  - **視覺與逐字字幕**：深夜雨窗鋼琴舞台單一呼吸運鏡 ＋ 底部即時黃金音樂頻譜聲波 ＋ `Whisper` 毫秒級逐字對嘴 KTV 流光字幕（[`lyric_aligner.py`](../lyric_aligner.py)）。
+- 🎬 **[Google Drive 線上預覽／下載 1080p 精準字幕動態背景版 MV (`mobanche_de_yu_synced_mv.mp4` · 22.7 MB)](https://drive.google.com/file/d/1IGu5v7XoTDte16IzXpXL4e0SJQFF9PJo/view)**（[直接下載連結](https://drive.google.com/uc?export=download&id=1IGu5v7XoTDte16IzXpXL4e0SJQFF9PJo)）
+- 🎵 **[Google Drive 下載 320kbps 廣播級母帶 MP3 (`mobanche_de_yu_ballad.mp3` · 2.3 MB)](https://drive.google.com/file/d/1xvJjxyzppOVEAfApmpMTclTRBsBonoJN/view)**（[直接下載連結](https://drive.google.com/uc?export=download&id=1xvJjxyzppOVEAfApmpMTclTRBsBonoJN)）
+
+---
+
+## 🎯 國風搖滾主打（字幕 100% 精準對齊音樂 × 單一動態背景聲波版）：《醉月長安》
 - **核心升級**：
   - **Whisper 逐字音節強制對齊（[`lyric_aligner.py`](../lyric_aligner.py)）**：精準辨識 `5.40s ~ 13.70s` 的 8.3 秒二胡與鋼琴間奏（自動顯示間奏提示，不再提早搶跑主歌字幕），並將每一句歌詞、每一個中文字與換氣停頓（`\kf` / `\k`）鎖定在歌手實際開口的毫秒時間點。
   - **單一動態舞台背景 ＋ 即時黃金音樂頻譜聲波（[`mv_renderer.py`](../mv_renderer.py)）**：專注呈現音樂與唱腔，搭配流暢呼吸感舞台運鏡與隨鼓點跳動的即時聲波光效。

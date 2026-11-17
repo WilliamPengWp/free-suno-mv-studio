@@ -535,6 +535,9 @@ def render_full_mv(
     return output_mp4
 
 
+import os
+import shutil
+
 GDRIVE_FOLDER_ID = os.environ.get("S2V_GDRIVE_FOLDER_ID", "1cpVuNRdwdwi0I-ramuyF5Dc7vhFdx8L3")
 
 
